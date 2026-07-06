@@ -7,7 +7,63 @@
     <script src="Build/UnityLoader.js"></script>
     <link rel="icon" href="icon.png">
     <script>
-      var gameInstance = UnityLoader.instantiate("gameContainer", "Build/10MinutesTillDawnWebGL.json");
+      // CDN base for this game's Build folder (split parts live here).
+      // Overridable via window.CDN_BASE so the same file works on GitHub Pages,
+      // jsDelivr, or embedded inside a Google Apps Script iframe.
+      var CDN_BASE =
+        window.CDN_BASE ||
+        "https://cdn.jsdelivr.net/gh/cool2fun/game-cdn-test@master/10-minutes-till-dawn/Build/";
+
+      // Fetch a multi-part asset and stitch it back into one Blob URL.
+      async function assembleParts(parts) {
+        var buffers = await Promise.all(
+          parts.map(function (p) {
+            return fetch(CDN_BASE + p).then(function (r) {
+              if (!r.ok) throw new Error("part " + p + " -> HTTP " + r.status);
+              return r.arrayBuffer();
+            });
+          })
+        );
+        return URL.createObjectURL(new Blob(buffers, { type: "application/octet-stream" }));
+      }
+
+      async function bootGame() {
+        // parts-manifest.json maps each oversized asset to its ordered parts.
+        var manifest = await fetch(CDN_BASE + "parts-manifest.json").then(function (r) {
+          return r.json();
+        });
+        var config = await fetch(CDN_BASE + "10MinutesTillDawnWebGL.json").then(function (r) {
+          return r.json();
+        });
+
+        // Reassemble each split asset and repoint the config at the Blob URL.
+        // Assets not in the manifest (e.g. wasm.framework) stay on the CDN directly.
+        var fieldByFile = {
+          "10MinutesTillDawnWebGL.data.unityweb": "dataUrl",
+          "10MinutesTillDawnWebGL.wasm.code.unityweb": "wasmCodeUrl",
+        };
+        for (var file in manifest) {
+          var blobUrl = await assembleParts(manifest[file]);
+          config[fieldByFile[file]] = blobUrl;
+        }
+        // Non-split asset: point at absolute CDN URL so resolveBuildUrl keeps it as-is.
+        config.wasmFrameworkUrl = CDN_BASE + config.wasmFrameworkUrl;
+
+        // Hand the patched config straight to UnityLoader via a data: URL,
+        // so instantiate's XHR reads our rewritten JSON instead of the CDN one.
+        var configUrl =
+          "data:application/json," + encodeURIComponent(JSON.stringify(config));
+        window.gameInstance = UnityLoader.instantiate("gameContainer", configUrl);
+      }
+
+      var gameInstance;
+      bootGame().catch(function (err) {
+        document.getElementById("gameContainer").innerHTML =
+          '<pre style="color:#fff;padding:16px;font:14px monospace">Load error: ' +
+          (err && err.message ? err.message : err) +
+          "</pre>";
+      });
+
       var scaleToFit;
       try {
         scaleToFit = !!JSON.parse("");
