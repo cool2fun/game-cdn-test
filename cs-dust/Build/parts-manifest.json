@@ -1,4 +1,0 @@
-{
-  "webgl.data": ["webgl.data.part00", "webgl.data.part01", "webgl.data.part02", "webgl.data.part03", "webgl.data.part04", "webgl.data.part05"],
-  "build.wasm": ["build.wasm.part00", "build.wasm.part01", "build.wasm.part02"]
-}
